@@ -2,7 +2,10 @@
 --sudoku solver pulled together by working on exercises from some university -dgn
 
 import Control.Monad
+import Data.Maybe
 import Data.Char
+import Data.List
+import Data.List.Split
 
 example :: Sudoku
 example =
@@ -17,36 +20,92 @@ example =
       , [Nothing,Nothing,Just 7, Just 6, Just 9, Nothing,Nothing,Just 4, Just 3]
       ]
 
-type Sudoku = [[Maybe Int]]
-
---why have a type constructor Sudoku or data type when i'm just going to pull out the [[Maybe Int]] ?
+type Sudoku = [[Maybe Int]] --to say [Block] is misleading
+type Block  = [Maybe Int]
+type Pos    = (Int,Int) --matrix style position (not chessboard)
 
 empty :: Sudoku
---empty = Sudoku [ [Nothing | rows <- [1..9]] | cols <- [1..9] ]
 empty = [replicate 9 Nothing | rows <- [1..9]]
 
-isSudoku :: Sudoku -> Bool --9 rows, 9 cols, every elem is Nothing or Just [1..9]
+--9 rows, 9 cols, every elem is Nothing or Just [1..9]
+isSudoku :: Sudoku -> Bool 
 isSudoku s = (==9) (length s ) &&
-                      ( and . map (==9) . map length $ s) &&
-                      ( and . map isvalid . concat $ s) where
-                        isvalid x = case x of
-                          Nothing -> True
-                          Just x -> elem x [1..9]
-                      
-charrep :: Maybe Int -> Char
-charrep x = case x of
- Just x -> intToDigit x
- Nothing -> '_'
- 
+             ( and . map (==9) . map length $ s) &&
+             ( and . map isvalid . concat $ s) where
+               isvalid x = case x of
+                  Nothing -> True
+                  Just x -> elem x [1..9]                      
+
+--read nub src for this obvoius way to find duplicates
+isSafeBlock :: Block -> Bool
+isSafeBlock [] = error "invalid block"
+isSafeBlock b = isSafeBlock' (filter isJust b) [] where
+ isSafeBlock' [] _ = True 
+ isSafeBlock' (b:bs) ls
+    | elem b ls    = False
+    | otherwise    = isSafeBlock' bs (b:ls)
+
+blocks :: Sudoku -> [Block]
+blocks s = s ++ getcols s ++ getsquares s where  
+  getcols = transpose 
+  getsquares s = concat . map (map concat . transpose) . chunksOf 3 . map (chunksOf 3) $ s --yitz in #haskell for help
+
+--is the entire sudoku free from relevant collisions (row/col/block)?
+prop_isOK :: Sudoku -> Bool 
+prop_isOK = and . (map isSafeBlock) . blocks
+
+poslabels :: Sudoku -> [(Int,[(Int, Maybe Int)])] --ugly type : -> [(row#, [(col#, cell value)])]
+poslabels = zip [0..] . map (zip [0..]) --zerobased
+
+--clean this up .. not very intelligible
+allBlanks :: Sudoku -> [Pos]
+allBlanks = concatMap rowBlanks . poslabels where 
+  rowBlanks x = [(r,cs) | r <- [fst x], cs <- (map fst . filter (isNothing . snd) . snd $ x)]
+
+prop_noBlanks :: Sudoku -> Bool
+prop_noBlanks s = allBlanks s == []
+
+--randomize later ... is this actually an improvement?
+fstblank :: [Pos] -> Pos
+fstblank = head
+
+--randblank :: ? -> ? -> Pos
+
+(!!=) :: [a] -> (Int, a) -> [a] --update the elem @ Int with a new a
+(!!=) [] _ = []
+(!!=) (x:xs) (0, a) = a : xs --zero-based
+(!!=) (x:xs) (pos,newval) = x : (!!=) xs (pos-1,newval) 
+
+update :: Sudoku -> Pos -> Maybe Int -> Sudoku
+update (x:xs) (row,col) newval
+  | row == 0  = (!!=) x (col, newval) : xs
+  | otherwise = x : update xs (row-1,col) newval 
+
+solve :: Sudoku -> Maybe Sudoku
+solve s
+   | (not . prop_isOK $ s) = Nothing
+   | prop_noBlanks s = Just s
+   | otherwise =  solve . fromJust . listToMaybe $ [(update s (fstblank . allBlanks $ s) (Just x )) | x <- [1..9] ]
+
+
+
 --try to write with mapM_
 prnt :: [[Maybe Int]] -> IO ()
-prnt [] = do return ()
+prnt []         = do return ()
 prnt (row:rows) = do
-  putStrLn . (map charrep) $ row 
+  putStrLn . (map charrep) $ row
   prnt rows
+    where
+      charrep x = case x of 
+        Just x -> intToDigit x
+        Nothing -> '_' 
 
 
 main = do
   prnt empty
   putStrLn "\n"
-  prnt  example
+  prnt example
+  putStrLn "\n"
+  let x = (update example (1,1) (Just 7)) 
+  prnt x
+  print (prop_isOK  x)
