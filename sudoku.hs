@@ -2,6 +2,7 @@
 --sudoku solver pulled together by working on exercises from some university -dgn
 
 import Control.Monad
+import Control.Monad.State
 import Data.Maybe
 import Data.Char
 import Data.List
@@ -83,11 +84,31 @@ update (x:xs) (row,col) newval
 
 solve :: Sudoku -> Maybe Sudoku
 solve s
-   | (not . prop_isOK $ s) = Nothing
-   | prop_noBlanks s = Just s
-   | otherwise =  solve . fromJust . listToMaybe $ [(update s (fstblank . allBlanks $ s) (Just x )) | x <- [1..9] ]
+   | (not . prop_isOK $ s) = Nothing --not valid
+   | prop_noBlanks s && prop_isOK s = Just s --valid and full <=> solved
+   | otherwise = undefined --pick the first blank and solve with substituting [1..9]
 
 
+
+--   | otherwise =  fromJust . listToMaybe $ [solve (update s (fstblank . allBlanks $ s) (Just x )) | x <- [1..9] ]
+--   | otherwise = solve (foldr (\newval -> update s (fstblank . allBlanks $ s) newval) s [Just x | x <- [1..9]])
+--   | otherwise = listToMaybe $ [sol | n <- [1..9], sol <- (solve (update s (fstblank . allBlanks $ s) (Just n)))]
+--   | otherwise = solve . fromJust . listToMaybe $ [sol | n <- [1..9], sol <- (update s (fstblank . allBlanks $ s) (Just n))]
+--   | otherwise = foldl (solve (\newval -> update s (fstblank . allBlanks $ s) newval))  s [Just x | x <- [1..9]]  
+
+--SOLVE NEEDS TO BE MONADIC .. CAN'T BACKTRACK WITHOUT
+
+--need to chain maybe sudokus
+-- Maybe Sudoku -> (Sudoku -> Maybe Sudoku) -> Maybe Sudoku
+
+--(>>=) :: m s -> (s -> m s) -> m s 
+
+--bnd :: Maybe Sudoku -> (Sudoku -> Maybe Sudoku) -> Maybe Sudoku
+
+--test s = do
+--   s' <- (Just (update s (fstblank . allBlanks $ s) (Just 4 )))
+--   print s'
+  
 
 --try to write with mapM_
 prnt :: [[Maybe Int]] -> IO ()
@@ -108,4 +129,6 @@ main = do
   putStrLn "\n"
   let x = (update example (1,1) (Just 7)) 
   prnt x
+--  x <- [1..9]
   print (prop_isOK  x)
+
